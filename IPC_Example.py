@@ -1,50 +1,23 @@
+import can
 import time
-import threading
-import gpioBuzzer
-import IPC_Library
+from gpioBuzzer import play_tone
 
-# 사용하려는 GPIO 핀 번호
-gpio_pin = 89
+def receive_can_message():
+    # CAN 인터페이스 설정
+    bus = can.interface.Bus(channel='can0', bustype='socketcan')  # 'can0'은 예시로, 실제 환경에 맞게 수정
 
-def ipc_listener():
-    """CAN 통신을 통해 수신한 메시지를 처리하는 함수"""
     while True:
-        try:
-            if IPC_Library.received_pucData:
-                print("Received data:", IPC_Library.received_pucData)
-                if IPC_Library.received_pucData[0] == 1:
-                    print("Playing C")
-                    gpioBuzzer.play_tone(gpio_pin, 261.63, 0.5)
-                elif IPC_Library.received_pucData[0] == 2:
-                    print("Playing D")
-                    gpioBuzzer.play_tone(gpio_pin, 293.66, 0.5)
-                else:
-                    print("No relevant data received.")
-            else:
-                print("No data received.")
-            time.sleep(0.1)
-        except Exception as e:
-            print(f"Error in IPC listener: {e}")
-            time.sleep(1)
+        # CAN 메시지 수신
+        message = bus.recv()
+        if message:
+            # 메시지에서 주파수와 지속 시간을 추출 (예: 데이터 첫 번째, 두 번째 바이트)
+            frequency = int(message.data[0])  # 첫 번째 데이터: 주파수
+            duration = int(message.data[1])   # 두 번째 데이터: 지속 시간
+
+            # 추출된 값을 이용해 버저 소리 재생
+            print(f"Received CAN message: Frequency={frequency}Hz, Duration={duration}s")
+            play_tone(17, frequency, duration)  # GPIO 17에서 톤 재생
 
 if __name__ == "__main__":
-    try:
-        # IPC 통신을 위한 쓰레드 실행
-        ipc_thread = threading.Thread(target=ipc_listener)
-        ipc_thread.daemon = True
-        ipc_thread.start()
-
-        # GPIO 초기화
-        gpioBuzzer.export_gpio(gpio_pin)
-        gpioBuzzer.set_gpio_direction(gpio_pin, "out")
-
-        # 메인 루프 - CAN 메시지를 계속 기다리며 처리
-        while True:
-            pass  # 지속적으로 IPC 데이터를 처리합니다.
-
-    except KeyboardInterrupt:
-        print("\nProgram interrupted")
-    except Exception as e:
-        print(f"An error occurred: {e}")
-    finally:
-        gpioBuzzer.unexport_gpio(gpio_pin)
+    print("Starting CAN message reception...")
+    receive_can_message()
